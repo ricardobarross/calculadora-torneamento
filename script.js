@@ -4,11 +4,11 @@
 
 // **ATUALIZE ESTAS DUAS LINHAS COM SUAS CHAVES DO SUPABASE**
 const SUPABASE_URL = 'https://ojggxqacgfrshzfdszie.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2d4cWFjZ2Zyc2h6ZmRzemllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNjg1MTQsImV4cCI6MjA3ODY0NDUxNH0.FCbYt5dNggwDMFfF-U5F2PptCMql1VO-RMvWjGtcZBc';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2d4cWFjZ2Zyc2h6ZmRzemllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNjg1MTQsImV4cCI6MjA3ODY0NDUxNH0.FCbYt5dNggwDMFfF-U5F2PptCMql1VO-RMvWjGtcZBc'; // Pegue sua chave pública
 
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let materiaisData = []; // Armazena os dados do Supabase
+let materiaisData = []; 
 let chartsReady = false; // Flag para rastrear o carregamento do Google Charts
 
 // ====================================================================
@@ -39,14 +39,14 @@ async function buscarMateriais() {
         materialSelect.innerHTML = '<option value="">Selecione o Material</option>';
         materiaisData.forEach(material => {
             const option = document.createElement('option');
-            option.value = material.key; // Usa a 'key' como valor para facilitar a busca
+            option.value = material.key; 
             option.textContent = material.nome;
             materialSelect.appendChild(option);
         });
 
     } catch (e) {
         console.error('Erro ao buscar materiais do Supabase:', e.message);
-        alert('Erro ao carregar materiais. Verifique a conexão com o banco de dados e as chaves API.');
+        // Não alerta aqui, pois o usuário pode ter esquecido o RLS/CORS
     } finally {
         loadingDiv.classList.remove('show');
         materialSelect.disabled = false;
@@ -69,35 +69,32 @@ function calcularParametros(formData) {
         materialKey,
         operacao,
         modoMaquina,
-        profundidadeCorte,
-        tempoDesejado
+        profundidadeCorte
     } = formData;
 
     const material = materiaisData.find(m => m.key === materialKey);
-    if (!material) throw new Error("Material não encontrado.");
+    if (!material) throw new Error("Material não encontrado. Selecione um material válido.");
 
-    const vc = material.vc_sugerido; // Velocidade de Corte (m/min)
-    const fn = material.fn_sugerido; // Avanço por Rotação (mm/rot)
-    const ap = profundidadeCorte || 1.0; // Penetração (mm)
+    const vc = material.vc_sugerido; 
+    const fn = material.fn_sugerido; 
+    const ap = profundidadeCorte || 1.0; 
 
     // 1. Rotação (n)
     const rpm = (vc * 1000) / (Math.PI * diametro);
-    const n_final = modoMaquina === 'CNC' ? Math.round(rpm) : Math.floor(rpm);
+    const n_final = modoMaquina === 'CNC' ? Math.round(rpm) : Math.floor(rpm); 
 
     // 2. Velocidade de Avanço (Vf)
-    const vf = n_final * fn; // mm/min
+    const vf = n_final * fn; 
 
     // 3. Tempo de Usinagem (Tm)
-    // O cálculo é feito sobre a distância a ser percorrida (L) / (Vf * k)
-    // O comprimento (L) é o que o avanço percorre.
     const L = comprimento; 
-    const tm_min = L / vf; // min
+    const tm_min = L / vf; 
 
     // 4. Produção
     const pecas_por_hora = 60 / tm_min;
 
     return {
-        // Entradas
+        // Entradas/Dados do Material
         ...material,
         diametro: diametro,
         comprimento: comprimento,
@@ -112,12 +109,6 @@ function calcularParametros(formData) {
         vf: vf,
         tm_min: tm_min,
         pecas_por_hora: pecas_por_hora,
-        
-        // Desafios e Sugestões (do Supabase)
-        desafios: material.desafios,
-        grau_iso: material.grau_iso,
-        inserto_sug: material.inserto_sug,
-        re: material.re
     };
 }
 
@@ -162,7 +153,6 @@ function mostrarResultados(dados, modoMaquina) {
     const resultsDiv = document.getElementById('results');
     
     // --- 1. CONSTRUÇÃO DO HTML DE RESULTADOS ---
-    // (O seu HTML de resultados, mantido aqui por concisão)
     let htmlResults = `
         <h3>📊 Resumo dos Parâmetros Calculados (${dados.operacao})</h3>
         <div class="result-item">
@@ -217,12 +207,11 @@ function mostrarResultados(dados, modoMaquina) {
     resultsDiv.innerHTML = htmlResults;
 
     // --- 2. DESENHAR GRÁFICO (CHAMADA CORRIGIDA) ---
-    // Chama a função drawChart. Como a lib já foi carregada na inicialização,
-    // esta chamada deve funcionar.
+    // A correção está em NÃO chamar google.charts.setOnLoadCallback aqui.
     if (chartsReady) {
         drawChart(dados);
     } else {
-        // Em um caso de erro, força o callback para tentar desenhar.
+        // Fallback: Se não estiver pronto, usa o callback para garantir.
         google.charts.setOnLoadCallback(() => drawChart(dados));
     }
 
@@ -254,7 +243,6 @@ document.getElementById('calcForm').addEventListener('submit', function(e) {
             operacao: document.getElementById('operacao').value,
             modoMaquina: document.getElementById('modoMaquina').value,
             materialKey: materialKey
-            // tempoDesejado: parseFloat(document.getElementById('tempoDesejado').value) || null
         };
         
         const resultados = calcularParametros(formData);
@@ -273,7 +261,7 @@ document.getElementById('calcForm').addEventListener('submit', function(e) {
 // ====================================================================
 
 // 1. Inicia o processo de carregamento dos pacotes do Google Charts.
-// Se a tag <script> com o loader.js estiver no index.html, esta linha já está OK.
+// Esta chamada deve ser feita APENAS UMA VEZ.
 google.charts.load('current', {'packages':['corechart', 'bar']});
 
 // 2. Define o callback para quando o Google Charts estiver pronto.

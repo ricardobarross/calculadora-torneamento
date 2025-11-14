@@ -1,74 +1,81 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Torneamento - Ricardo Barros</title>
-    <link rel="stylesheet" href="style.css">
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Torneamento - Ricardo Barros</title>
+    <link rel="stylesheet" href="style.css">
+    </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🔧 Calculadora de Torneamento Avançada</h1>
-            <p>Por Ricardo Barros - Parâmetros, tempo e recomendações de insertos.</p>
-        </div>
-        
-        <div class="content">
-            <form id="calcForm">
-                
-                <div class="form-group">
-                    <label for="modoMaquina">Modo de Operação</label>
-                    <select id="modoMaquina" required>
-                        <option value="CNC">Torno CNC (Velocidade de Corte Constante)</option>
-                        <option value="Convencional">Torno Convencional (RPM Fixo Sugerido)</option>
-                    </select>
-                </div>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Calculadora de Torneamento Avançada</h1>
+            <p>Por Ricardo Barros - Parâmetros, tempo e recomendações de insertos.</p>
+        </div>
+        
+        <div class="content">
+            <form id="calcForm">
+                
+                <div class="form-group">
+                    <label for="modoMaquina">Modo de Operação</label>
+                    <select id="modoMaquina" required>
+                        <option value="CNC">Torno CNC (Velocidade de Corte Constante)</option>
+                        <option value="Convencional">Torno Convencional (RPM Fixo Sugerido)</option>
+                    </select>
+                </div>
 
+                <div class="form-group">
+                    <label for="material">Material da Peça (Carregado do Supabase)</label>
+                    <select id="material" required>
+                        <option value="">Carregando materiais...</option>
+                    </select>
+                </div>
+                
+                <div class="grid-select">
+                    <div class="form-group">
+                        <label for="diametro">Diâmetro da Peça (mm)</label>
+                        <input type="number" id="diametro" placeholder="Ex: 50" min="1" step="0.1" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="comprimento">Comprimento a Usinar (mm)</label>
+                        <input type="number" id="comprimento" placeholder="Ex: 100" min="1" step="0.1" required>
+                    </div>
+                </div>
+                
                 <div class="form-group">
-                    <label for="material">Material da Peça (Carregado do Supabase)</label>
-                    <select id="material" required>
-                        <option value="">Carregando materiais...</option>
-                    </select>
-                </div>
-                
-                <div class="grid-select">
-                    <div class="form-group">
-                        <label for="diametro">Diâmetro da Peça (mm)</label>
-                        <input type="number" id="diametro" placeholder="Ex: 50" min="1" step="0.1" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="comprimento">Comprimento a Usinar (mm)</label>
-                        <input type="number" id="comprimento" placeholder="Ex: 100" min="1" step="0.1" required>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="operacao">Tipo de Operação</label>
-                    <select id="operacao" required>
-                        <option value="Desbaste">Desbaste (Produtividade: f_n MÁX)</option>
-                        <option value="Acabamento">Acabamento (Qualidade: f_n MÍN)</option>
-                    </select>
-                </div>
-                
-                <button type="submit" class="btn">Calcular Parâmetros e Resumo</button>
-            </form>
-            
-            <div id="loading" class="loading">
-                <div class="spinner"></div>
-                <p style="margin-top: 10px; color: #4a5568;">Calculando...</p>
-            </div>
-            
-            <div id="results" class="results">
-                </div>
-        </div>
-        
-        <div class="footer">
-            Desenvolvido por Ricardo Barros para processos de usinagem
-        </div>
-    </div>
+                    <label for="ap">Penetração (Profundidade de Corte) ap (mm)</label>
+                    <input type="number" id="ap" placeholder="Sugestão de 1.0mm" min="0.1" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label for="operacao">Tipo de Operação</label>
+                    <select id="operacao" required>
+                        <option value="Desbaste">Desbaste (Produtividade: f_n MÁX)</option>
+                        <option value="Acabamento">Acabamento (Qualidade: f_n MÍN)</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn">Calcular Parâmetros e Resumo</button>
+            </form>
+            
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; color: #4a5568;">Calculando...</p>
+            </div>
+            
+            <div id="results" class="results">
+            </div>
+        </div>
+        
+        <div class="footer">
+            Desenvolvido por Ricardo Barros para processos de usinagem
+        </div>
+    </div>
+    
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <script src="script.js"></script>
 </body>
