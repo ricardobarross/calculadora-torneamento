@@ -1,189 +1,154 @@
 // ====================================================================
-// --- 1. CONFIGURAÇÃO SUPABASE ---
-// ** IMPORTANTE: Preencha com suas credenciais do projeto Supabase **
+// --- 1. CONFIGURAÇÃO E VARIÁVEIS GLOBAIS ---
 // ====================================================================
 
+// **ATUALIZE ESTAS DUAS LINHAS COM SUAS CHAVES DO SUPABASE**
 const SUPABASE_URL = 'https://ojggxqacgfrshzfdszie.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2d4cWFjZ2Zyc2h6ZmRzemllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNjg1MTQsImV4cCI6MjA3ODY0NDUxNH0.FCbYt5dNggwDMFfF-U5F2PptCMql1VO-RMvWjGtcZBc'; // Chave pública (Anon Key)
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9qZ2d4cWFjZ2Zyc2h6ZmRzemllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNjg1MTQsImV4cCI6MjA3ODY0NDUxNH0.FCbYt5dNggwDMFfF-U5F2PptCMql1VO-RMvWjGtcZBc';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Cache para armazenar os dados dos materiais carregados do BD
-let materiaisCache = {};
+let materiaisData = []; // Armazena os dados do Supabase
+let chartsReady = false; // Flag para rastrear o carregamento do Google Charts
 
 // ====================================================================
-// --- 2. FUNÇÕES DE BUSCA DE DADOS ---
+// --- 2. FUNÇÕES DE BUSCA DE DADOS (SUPABASE) ---
 // ====================================================================
 
 /**
- * Busca todos os materiais da tabela Supabase e armazena no cache.
+ * Busca a lista de materiais do Supabase e preenche o dropdown.
  */
 async function buscarMateriais() {
+    const loadingDiv = document.getElementById('loading');
+    const materialSelect = document.getElementById('material');
+    
+    loadingDiv.classList.add('show');
+    materialSelect.disabled = true;
+
     try {
         const { data, error } = await supabase
-            .from('materiais') // Nome da tabela
+            .from('materiais')
             .select('*')
-            .order('grupo_iso', { ascending: true })
             .order('nome', { ascending: true });
 
         if (error) throw error;
-
-        // Organiza os dados em cache no formato {chave_material: objeto_completo}
-        data.forEach(mat => {
-            materiaisCache[mat.chave_material] = mat;
-        });
-
-        carregarOpcoesMateriais(data);
-
-    } catch (error) {
-        console.error('Erro ao buscar materiais do Supabase:', error.message);
-        alert('Erro ao conectar ao banco de dados: ' + error.message);
-        document.getElementById('material').innerHTML = '<option value="">Erro ao carregar</option>';
-    }
-}
-
-/**
- * Preenche o <select> de materiais no HTML, agrupando-os.
- * @param {Array} data - Lista de materiais.
- */
-function carregarOpcoesMateriais(data) {
-    const select = document.getElementById('material');
-    select.innerHTML = '<option value="">Selecione o material...</option>';
-    
-    // Organizar por grupo ISO
-    const grupos = {};
-    data.forEach(mat => {
-        if (!grupos[mat.grupo_iso]) {
-            grupos[mat.grupo_iso] = [];
-        }
-        grupos[mat.grupo_iso].push(mat);
-    });
-    
-    // Criar optgroups no HTML
-    for (let grupo in grupos) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = grupo; 
         
-        grupos[grupo].forEach(mat => {
+        materiaisData = data;
+        
+        // Preencher o <select>
+        materialSelect.innerHTML = '<option value="">Selecione o Material</option>';
+        materiaisData.forEach(material => {
             const option = document.createElement('option');
-            option.value = mat.chave_material;
-            option.textContent = mat.nome;
-            optgroup.appendChild(option);
+            option.value = material.key; // Usa a 'key' como valor para facilitar a busca
+            option.textContent = material.nome;
+            materialSelect.appendChild(option);
         });
-        
-        select.appendChild(optgroup);
+
+    } catch (e) {
+        console.error('Erro ao buscar materiais do Supabase:', e.message);
+        alert('Erro ao carregar materiais. Verifique a conexão com o banco de dados e as chaves API.');
+    } finally {
+        loadingDiv.classList.remove('show');
+        materialSelect.disabled = false;
     }
 }
 
 // ====================================================================
-// --- 3. LÓGICA DE CÁLCULO (Adaptada do Code.gs) ---
+// --- 3. FUNÇÕES DE CÁLCULO E LÓGICA ---
 // ====================================================================
 
 /**
- * Executa os cálculos cinemáticos e de produção.
- * @param {Object} mat - Objeto material completo do Supabase.
- * @param {number} diametro - Diâmetro da peça.
- * @param {string} operacao - 'Desbaste' ou 'Acabamento'.
- * @param {number} comprimento - Comprimento a usinar.
- * @returns {Object} Resultados calculados.
+ * Realiza todos os cálculos de usinagem.
+ * @param {Object} formData - Dados do formulário e do material.
+ * @returns {Object} Resultados do cálculo.
  */
-function calcularParametros(mat, diametro, operacao, comprimento) {
-    
-    // 1. Vc: Desbaste = Média, Acabamento = Máxima.
-    const vc = operacao === "Desbaste" 
-        ? Math.round((mat.vc_min + mat.vc_max) / 2)
-        : mat.vc_max;
-    
-    // 2. RPM (n)
-    // Fórmula: n = (1000 * Vc) / (pi * D)
-    const rpm_calc = Math.round((1000 * vc) / (Math.PI * diametro));
-    
-    // 3. fn: Desbaste = MÁXIMO, Acabamento = MÍNIMO.
-    const fn_value = operacao === "Desbaste"
-        ? mat.fn_desb_max
-        : mat.fn_acab_min; 
-    const fn = fn_value; 
-    
-    // 4. ap: Desbaste ~ 3x Re, Acabamento ~ 0.8x Re.
-    const ap = operacao === "Desbaste"
-        ? (mat.re * 3.0).toFixed(1)
-        : (mat.re * 0.8).toFixed(1);
+function calcularParametros(formData) {
+    const { 
+        diametro,
+        comprimento,
+        materialKey,
+        operacao,
+        modoMaquina,
+        profundidadeCorte,
+        tempoDesejado
+    } = formData;
 
-    const rpm_final = rpm_calc; // Mantemos o RPM ideal
+    const material = materiaisData.find(m => m.key === materialKey);
+    if (!material) throw new Error("Material não encontrado.");
 
-    // 5. Vf e Tm
-    const Vf_calculado = fn * rpm_final;
-    const Vf_final = Math.min(Vf_calculado, mat.vf_max); // Limita pelo avanço máximo da máquina (Vf_max)
-    const Tm_min = (comprimento / Vf_final); // Tempo em minutos
+    const vc = material.vc_sugerido; // Velocidade de Corte (m/min)
+    const fn = material.fn_sugerido; // Avanço por Rotação (mm/rot)
+    const ap = profundidadeCorte || 1.0; // Penetração (mm)
 
-    // Sugestão de Inserto
-    const inserto_sug = operacao === "Desbaste" 
-        ? mat.inserto_desb_sug + " (Desb.)" 
-        : mat.inserto_acab_sug + " (Acab.)";
+    // 1. Rotação (n)
+    const rpm = (vc * 1000) / (Math.PI * diametro);
+    const n_final = modoMaquina === 'CNC' ? Math.round(rpm) : Math.floor(rpm);
+
+    // 2. Velocidade de Avanço (Vf)
+    const vf = n_final * fn; // mm/min
+
+    // 3. Tempo de Usinagem (Tm)
+    // O cálculo é feito sobre a distância a ser percorrida (L) / (Vf * k)
+    // O comprimento (L) é o que o avanço percorre.
+    const L = comprimento; 
+    const tm_min = L / vf; // min
+
+    // 4. Produção
+    const pecas_por_hora = 60 / tm_min;
 
     return {
-        vc: vc,
-        rpm: rpm_final,
-        fn: fn,
-        ap: parseFloat(ap),
-        vf: Vf_final,
-        tm_min: parseFloat(Tm_min.toFixed(2)),
-        
-        // Dados para resumo e notas (usando os campos do BD)
-        inserto_sug: inserto_sug,
-        grau_iso: mat.grau_iso,
-        grupo: mat.grupo_iso,
-        kc: mat.kc,
-        re: mat.re,
-        nome: mat.nome,
-        desafios: mat.desafios,
-        operacao: operacao,
+        // Entradas
+        ...material,
+        diametro: diametro,
         comprimento: comprimento,
-        diametro: diametro
+        operacao: operacao,
+        modoMaquina: modoMaquina,
+        
+        // Resultados
+        vc: vc,
+        fn: fn,
+        ap: ap,
+        rpm: n_final,
+        vf: vf,
+        tm_min: tm_min,
+        pecas_por_hora: pecas_por_hora,
+        
+        // Desafios e Sugestões (do Supabase)
+        desafios: material.desafios,
+        grau_iso: material.grau_iso,
+        inserto_sug: material.inserto_sug,
+        re: material.re
     };
 }
+
 
 // ====================================================================
 // --- 4. FUNÇÕES DE INTERFACE (DISPLAY) ---
 // ====================================================================
 
 /**
- * Lida com o evento de submissão do formulário.
+ * Desenha o gráfico de produção.
+ * @param {Object} dados - Resultados do cálculo.
  */
-document.getElementById('calcForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const materialKey = document.getElementById('material').value;
-    const diametro = parseFloat(document.getElementById('diametro').value);
-    const operacao = document.getElementById('operacao').value;
-    const comprimento = parseFloat(document.getElementById('comprimento').value);
-    const modoMaquina = document.getElementById('modoMaquina').value; 
-    
-    if (!materialKey || isNaN(diametro) || isNaN(comprimento)) {
-        alert("Por favor, preencha todos os campos corretamente.");
-        return;
-    }
-    
-    const materialData = materiaisCache[materialKey];
-    if (!materialData) {
-        alert("Dados do material não encontrados no cache.");
-        return;
-    }
+function drawChart(dados) {
+    const data = google.visualization.arrayToDataTable([
+        ['Métrica', 'Valor'],
+        ['Rotação (n)', dados.rpm],
+        ['Vf (mm/min)', dados.vf],
+        ['Tm (min)', dados.tm_min],
+        ['Peças/Hora', dados.pecas_por_hora]
+    ]);
 
-    // Mostrar loading
-    document.getElementById('loading').classList.add('show');
-    document.getElementById('results').classList.remove('show');
+    const options = {
+        title: 'Resumo de Produção e Parâmetros',
+        vAxis: { title: 'Valores Calculados' },
+        legend: { position: 'none' },
+        chartArea: { width: '80%', height: '70%' }
+    };
 
-    // Executar o cálculo
-    try {
-        const resultados = calcularParametros(materialData, diametro, operacao, comprimento);
-        mostrarResultados(resultados, modoMaquina);
-    } catch (e) {
-        alert('Erro durante o cálculo: ' + e.message);
-        console.error(e);
-        document.getElementById('loading').classList.remove('show');
-    }
-});
+    const chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
+    chart.draw(data, options);
+}
 
 
 /**
@@ -197,6 +162,7 @@ function mostrarResultados(dados, modoMaquina) {
     const resultsDiv = document.getElementById('results');
     
     // --- 1. CONSTRUÇÃO DO HTML DE RESULTADOS ---
+    // (O seu HTML de resultados, mantido aqui por concisão)
     let htmlResults = `
         <h3>📊 Resumo dos Parâmetros Calculados (${dados.operacao})</h3>
         <div class="result-item">
@@ -227,6 +193,10 @@ function mostrarResultados(dados, modoMaquina) {
             <span class="result-label">Velocidade de Avanço (V_f):</span>
             <span class="result-value">${dados.vf.toFixed(0)} mm/min</span>
         </div>
+        <div class="result-item" style="border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px;">
+            <span class="result-label" style="font-weight:700;">Peças por Hora (Estimativa):</span>
+            <span class="result-value">${dados.pecas_por_hora.toFixed(2)}</span>
+        </div>
 
         <div class="material-info">
             <h4>Recomendação de Ferramenta (${dados.operacao}):</h4>
@@ -246,45 +216,71 @@ function mostrarResultados(dados, modoMaquina) {
     
     resultsDiv.innerHTML = htmlResults;
 
-    // --- 2. DESENHAR GRÁFICO ---
-    google.charts.setOnLoadCallback(() => drawChart(dados));
+    // --- 2. DESENHAR GRÁFICO (CHAMADA CORRIGIDA) ---
+    // Chama a função drawChart. Como a lib já foi carregada na inicialização,
+    // esta chamada deve funcionar.
+    if (chartsReady) {
+        drawChart(dados);
+    } else {
+        // Em um caso de erro, força o callback para tentar desenhar.
+        google.charts.setOnLoadCallback(() => drawChart(dados));
+    }
 
     // Mostrar resultados
     resultsDiv.classList.add('show');
 }
 
+// ====================================================================
+// --- 5. LÓGICA DE SUBMISSÃO DO FORMULÁRIO ---
+// ====================================================================
 
-/**
- * Desenha o gráfico de colunas com os parâmetros principais.
- * @param {Object} dados - Resultados do cálculo.
- */
-function drawChart(dados) {
-    // Escala Vc e Vf para que fiquem visíveis no mesmo gráfico com Tm
-    const vf_scaled = dados.vf / 100;
-    const vc_scaled = dados.vc / 100;
+document.getElementById('calcForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    document.getElementById('loading').classList.add('show');
+    document.getElementById('results').classList.remove('show');
 
-    var data = google.visualization.arrayToDataTable([
-        ['Métrica', 'Valor', {role: 'style'}],
-        ['Tempo Usinagem (min)', dados.tm_min, '#764ba2'],
-        ['Vf (x100 mm/min)', vf_scaled, '#667eea'], 
-        ['Vc (x100 m/min)', vc_scaled, '#8e9eeb']
-    ]);
+    try {
+        const materialKey = document.getElementById('material').value;
+        if (!materialKey) {
+            alert("Selecione um material para calcular.");
+            document.getElementById('loading').classList.remove('show');
+            return;
+        }
 
-    var options = {
-        title: 'Comparativo de Parâmetros Principais',
-        legend: { position: "none" },
-        vAxis: { title: "Valor (Escalado/Minutos)" },
-        hAxis: { title: "" },
-    };
+        const formData = {
+            diametro: parseFloat(document.getElementById('diametro').value),
+            comprimento: parseFloat(document.getElementById('comprimento').value),
+            profundidadeCorte: parseFloat(document.getElementById('ap').value) || null,
+            operacao: document.getElementById('operacao').value,
+            modoMaquina: document.getElementById('modoMaquina').value,
+            materialKey: materialKey
+            // tempoDesejado: parseFloat(document.getElementById('tempoDesejado').value) || null
+        };
+        
+        const resultados = calcularParametros(formData);
+        mostrarResultados(resultados, formData.modoMaquina);
 
-    var chart = new google.visualization.ColumnChart(document.getElementById('chart_div'));
-    chart.draw(data, options);
-}
+    } catch (error) {
+        console.error("Erro durante o cálculo:", error);
+        alert(`Erro durante o cálculo: ${error.message}`);
+        document.getElementById('loading').classList.remove('show');
+    }
+});
 
 
 // ====================================================================
-// --- 5. INICIALIZAÇÃO ---
+// --- 6. INICIALIZAÇÃO E CARREGAMENTO DE LIBS (GARANTIA DE ORDEM) ---
 // ====================================================================
 
-// Inicia a busca por materiais ao carregar a página
+// 1. Inicia o processo de carregamento dos pacotes do Google Charts.
+// Se a tag <script> com o loader.js estiver no index.html, esta linha já está OK.
+google.charts.load('current', {'packages':['corechart', 'bar']});
+
+// 2. Define o callback para quando o Google Charts estiver pronto.
+google.charts.setOnLoadCallback(function() {
+    console.log("Google Charts: Lib carregada e pronta.");
+    chartsReady = true; // Seta a flag para true
+});
+
+// 3. Inicia a busca por materiais ao carregar a página
 document.addEventListener('DOMContentLoaded', buscarMateriais);
